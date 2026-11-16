@@ -1,0 +1,9 @@
+{
+  "name": "live-poll",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sondaggi live come overlay OBS, con voti letti dalla chat tramite Social Stream Ninja.",
+  "type": "module",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

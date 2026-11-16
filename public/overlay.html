@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Live Poll · Overlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink: #f4f6fb;
+    --muted: #aab3c5;
+    --card: rgba(13, 18, 30, .86);
+    --line: rgba(255, 255, 255, .12);
+    --track: rgba(255, 255, 255, .13);
+    --accent: #4c8dff;
+    --right: #2fbf71;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: transparent; overflow: hidden; }
+  body {
+    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    display: flex; justify-content: center;
+    padding: 4vh 5vw;
+    font-size: 1.48vw;              /* tutto scala con la larghezza della sorgente */
+  }
+  body[data-pos="bottom"] { align-items: flex-end; }
+  body[data-pos="top"]    { align-items: flex-start; }
+  body[data-pos="center"] { align-items: center; }
+
+  .card {
+    width: 100%; max-width: 78vw;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 1.1em;
+    padding: 1.3em 1.6em 1.2em;
+    box-shadow: 0 1.2em 3em rgba(0, 0, 0, .45);
+    opacity: 0; transform: translateY(1.2em);
+    transition: opacity .45s ease, transform .45s ease;
+  }
+  body[data-pos="top"] .card { transform: translateY(-1.2em); }
+  body[data-view="question"] .card, body[data-view="results"] .card { opacity: 1; transform: none; }
+
+  .head { display: flex; align-items: flex-start; gap: 1em; margin-bottom: 1em; }
+  h1 { flex: 1; font-size: 1.55em; line-height: 1.2; font-weight: 700; text-wrap: balance; }
+  .meta {
+    flex: none; text-align: right; color: var(--muted);
+    font-size: .78em; line-height: 1.35; padding-top: .35em;
+    font-variant-numeric: tabular-nums;
+  }
+  .meta b { display: block; color: var(--ink); font-size: 1.5em; font-weight: 700; }
+  body[data-view="question"] .meta .votes { display: none; }
+  body[data-view="results"] .meta .hint { display: none; }
+  .hint { max-width: 12em; font-size: 1.15em; color: var(--ink); font-weight: 600; }
+
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: .75em 1.6em; }
+  .options.single { grid-template-columns: 1fr; }
+  .opt { min-width: 0; }
+  .row { display: flex; align-items: center; gap: .65em; }
+  .letter {
+    flex: none; width: 1.75em; height: 1.75em; border-radius: .4em;
+    display: grid; place-items: center;
+    background: var(--accent); color: #fff; font-weight: 700;
+    transition: background .4s ease;
+  }
+  .text { flex: 1; min-width: 0; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+  .pct {
+    flex: none; width: 0; overflow: hidden; text-align: right; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    opacity: 0; transition: opacity .4s ease, width .4s ease;
+  }
+  .track {
+    height: 0; margin-top: 0; border-radius: 1em; background: var(--track); overflow: hidden;
+    opacity: 0; transition: height .4s ease, margin-top .4s ease, opacity .4s ease;
+  }
+  .bar {
+    height: 100%; width: 0%; border-radius: 1em; background: var(--accent);
+    transition: width .8s cubic-bezier(.2, .7, .2, 1), background .4s ease;
+  }
+  body[data-view="results"] .pct { opacity: 1; width: 3.2em; }
+  body[data-view="results"] .track { height: .55em; margin-top: .45em; opacity: 1; }
+
+  body[data-reveal="1"][data-view="results"] .opt.right .letter,
+  body[data-reveal="1"][data-view="results"] .opt.right .bar { background: var(--right); }
+  body[data-reveal="1"][data-view="results"] .opt:not(.right) { opacity: .55; }
+  .opt { transition: opacity .4s ease; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-view="hidden" data-pos="bottom">
+  <main class="card" aria-live="polite">
+    <div class="head">
+      <h1 id="title"></h1>
+      <div class="meta">
+        <div class="hint">Rispondi in chat con la lettera</div>
+        <div class="votes"><b id="total">0</b><span id="total-label">voti</span></div>
+      </div>
+    </div>
+    <div class="options" id="options"></div>
+  </main>
+
+<script>
+const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f'];
+const $ = (id) => document.getElementById(id);
+let renderedKey = '';
+// ?preview: anteprima nel pannello di regia, non legge la chat.
+const PREVIEW = new URLSearchParams(location.search).has('preview');
+
+function render(state) {
+  const { live, polls, settings } = state;
+  const poll = polls.find((p) => p.id === live.activeId);
+  document.body.dataset.pos = settings.position || 'bottom';
+  document.body.dataset.reveal = live.reveal ? '1' : '0';
+
+  if (!poll) { document.body.dataset.view = 'hidden'; connectChat(settings); return; }
+
+  // Ricostruisce il DOM solo se cambia il sondaggio, così le barre si animano.
+  const key = JSON.stringify([poll.id, poll.title, poll.options, poll.right]);
+  if (key !== renderedKey) {
+    renderedKey = key;
+    $('title').textContent = poll.title;
+    const box = $('options');
+    box.replaceChildren();
+    box.classList.toggle('single', poll.options.length <= 2 || poll.options.some((o) => o.length > 60));
+    poll.options.forEach((text, i) => {
+      const letter = LETTERS[i];
+      const opt = document.createElement('div');
+      opt.className = 'opt' + (poll.right === letter ? ' right' : '');
+      opt.innerHTML = '<div class="row"><span class="letter"></span><span class="text"></span><span class="pct">0%</span></div><div class="track"><div class="bar"></div></div>';
+      opt.querySelector('.letter').textContent = letter.toUpperCase();
+      opt.querySelector('.text').textContent = text;
+      opt.dataset.letter = letter;
+      box.appendChild(opt);
+    });
+  }
+
+  const total = live.total || 0;
+  $('total').textContent = total;
+  $('total-label').textContent = total === 1 ? 'voto' : 'voti';
+  document.querySelectorAll('.opt').forEach((opt) => {
+    const pct = total ? Math.round(((live.counts[opt.dataset.letter] || 0) / total) * 100) : 0;
+    opt.querySelector('.pct').textContent = pct + '%';
+    opt.querySelector('.bar').style.width = pct + '%';
+  });
+
+  document.body.dataset.view = live.view;
+  connectChat(settings);
+}
+
+// ---- stato dal server locale ----
+function connectState() {
+  const es = new EventSource('/api/stream?role=' + (PREVIEW ? 'preview' : 'overlay'));
+  es.onmessage = (e) => render(JSON.parse(e.data));
+}
+connectState();
+
+// ---- chat da Social Stream Ninja (stesso metodo del loro overlay di esempio) ----
+let chatFrame = null, chatKey = '';
+function connectChat(settings) {
+  const session = (settings.sessionId || '').trim();
+  const key = session + '|' + (settings.password || '');
+  if (PREVIEW || key === chatKey) return;
+  chatKey = key;
+  if (chatFrame) { chatFrame.remove(); chatFrame = null; }
+  if (!session) return;
+  chatFrame = document.createElement('iframe');
+  chatFrame.src = 'https://vdo.socialstream.ninja/?ln&salt=vdo.ninja&password=' +
+    encodeURIComponent(settings.password || 'false') +
+    '&push&label=dock&vd=0&ad=0&novideo&noaudio&autostart&cleanoutput&room=' + encodeURIComponent(session);
+  chatFrame.style.cssText = 'width:0;height:0;position:fixed;left:-100px;top:-100px;border:0';
+  document.body.appendChild(chatFrame);
+}
+window.addEventListener('message', (e) => {
+  if (!chatFrame || e.source !== chatFrame.contentWindow) return;
+  const msg = e.data && e.data.dataReceived && e.data.dataReceived.overlayNinja;
+  if (!msg || typeof msg !== 'object') return;
+  fetch('/api/vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: msg.chatname || '', text: msg.chatmessage || '' }),
+  }).catch(() => {});
+});
+</script>
+</body>
+</html>

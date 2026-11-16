@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Live Poll · Regia</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f3f4f7; --panel: #ffffff; --ink: #161a23; --muted: #667085; --line: #dfe3ea;
+    --accent: #2f6fed; --accent-ink: #ffffff; --soft: #eef2fb;
+    --live: #d92d20; --ok: #1f9d5b; --warn: #b54708;
+    --stage: #2a3040;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10131a; --panel: #181c26; --ink: #eef1f7; --muted: #98a2b5; --line: #2b3140;
+      --accent: #5b93ff; --accent-ink: #0b1020; --soft: #212838;
+      --live: #ff6b5e; --ok: #45c986; --warn: #f0a44b;
+      --stage: #05070b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  header.top {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header.top h1 { font-size: 17px; margin: 0; margin-right: auto; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px;
+    border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); white-space: nowrap;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.ok .dot { background: var(--ok); } .pill.ok { color: var(--ink); }
+  .pill.warn .dot { background: var(--warn); }
+
+  .layout { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; padding: 16px 20px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 12px 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  .panel + .panel { margin-top: 16px; }
+  h2 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); border-radius: 8px;
+    padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.small { padding: 3px 8px; font-size: 13px; }
+  .btn.danger:hover { border-color: var(--live); color: var(--live); }
+  .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  kbd {
+    font: 11px ui-monospace, Menlo, monospace; border: 1px solid currentColor; border-radius: 4px;
+    padding: 0 5px; opacity: .65; margin-left: 6px;
+  }
+
+  /* elenco sondaggi */
+  .polls { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+  .poll {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; background: var(--panel);
+  }
+  .poll.active { border-color: var(--accent); background: var(--soft); }
+  .poll .t { font-weight: 600; overflow-wrap: anywhere; }
+  .poll .sub { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+  .poll .sub span { margin-right: auto; }
+  .empty { color: var(--muted); margin: 0 0 12px; }
+
+  /* editor */
+  form.editor { display: grid; gap: 10px; }
+  label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  .optrow { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; }
+  .optrow b { text-align: center; }
+  label.radio { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+  .rowbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details[open] summary { margin-bottom: 8px; }
+  .err { color: var(--live); font-size: 13px; min-height: 1em; }
+
+  /* regia */
+  .onair { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .onair .title { font-size: 18px; font-weight: 700; flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+  .badge { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .badge.on { background: var(--live); border-color: var(--live); color: #fff; }
+  .badge.open { border-color: var(--ok); color: var(--ok); }
+  .cmds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cmds .btn { padding: 14px 10px; font-weight: 600; white-space: normal; }
+  .cmds .btn.current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .cmds2 { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  @media (max-width: 560px) { .cmds { grid-template-columns: 1fr; } }
+
+  .results { display: grid; gap: 8px; }
+  .res { display: grid; grid-template-columns: 26px 1fr 96px; gap: 10px; align-items: center; }
+  .res .lt { font-weight: 700; text-align: center; }
+  .res .tx { min-width: 0; }
+  .res .tx div:first-child { overflow-wrap: anywhere; }
+  .res .trk { height: 6px; border-radius: 6px; background: var(--soft); margin-top: 4px; overflow: hidden; }
+  .res .trk i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 6px; transition: width .5s ease; }
+  .res.right .trk i { background: var(--ok); }
+  .res .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .res .n small { color: var(--muted); }
+  .tot { color: var(--muted); font-size: 13px; margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .tot .sim { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+
+  .stage {
+    aspect-ratio: 16 / 9; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--line);
+    background: var(--stage)
+      repeating-conic-gradient(rgba(255,255,255,.05) 0% 25%, transparent 0% 50%) 0 0 / 24px 24px;
+  }
+  .stage iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .urlrow { display: flex; gap: 8px; margin-top: 10px; }
+  .urlrow input { font: 13px ui-monospace, Menlo, monospace; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+  .note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Live Poll · Regia</h1>
+  <span class="pill" id="pill-overlay"><span class="dot"></span><span>Overlay non collegato</span></span>
+  <span class="pill" id="pill-chat"><span class="dot"></span><span>Chat: nessun messaggio</span></span>
+</header>
+
+<div class="layout">
+  <!-- colonna sinistra: sondaggi -->
+  <div>
+    <section class="panel">
+      <h2>Sondaggi</h2>
+      <ul class="polls" id="polls"></ul>
+      <p class="empty" id="empty">Nessun sondaggio. Creane uno qui sotto.</p>
+      <button class="btn" id="new">+ Nuovo sondaggio</button>
+    </section>
+
+    <section class="panel">
+      <h2 id="editor-title">Nuovo sondaggio</h2>
+      <form class="editor" id="editor">
+        <details id="paste-box">
+          <summary>Incolla domanda e risposte da testo</summary>
+          <textarea id="paste" rows="6" placeholder="Domanda: Che cosa rispondereste al collega?&#10;* A. Prima risposta&#10;* B. Seconda risposta"></textarea>
+          <div class="rowbtns" style="margin-top:8px"><button type="button" class="btn small" id="parse">Compila i campi</button></div>
+        </details>
+        <label>Domanda<textarea id="f-title" rows="2" required></textarea></label>
+        <div id="f-options" style="display:grid;gap:8px"></div>
+        <label class="radio"><input type="radio" name="right" value="" checked> Nessuna risposta corretta</label>
+        <div class="err" id="err" role="alert"></div>
+        <div class="rowbtns">
+          <button class="btn primary" type="submit">Salva</button>
+          <button class="btn" type="button" id="cancel">Annulla</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- colonna destra: regia -->
+  <div>
+    <section class="panel">
+      <h2>In onda</h2>
+      <div class="onair">
+        <div class="title" id="live-title">Seleziona un sondaggio</div>
+        <span class="badge" id="b-view">NASCOSTO</span>
+        <span class="badge" id="b-open">VOTO CHIUSO</span>
+      </div>
+      <div class="cmds">
+        <button class="btn" data-cmd="question" data-view="question">Mostra domanda<kbd>Q</kbd></button>
+        <button class="btn" data-cmd="results" data-view="results">Mostra risultati<kbd>R</kbd></button>
+        <button class="btn" data-cmd="hide" data-view="hidden">Nascondi<kbd>H</kbd></button>
+      </div>
+      <div class="cmds2">
+        <button class="btn" id="c-open"><span>Chiudi voto</span><kbd>V</kbd></button>
+        <button class="btn" id="c-reveal" data-cmd="reveal">Evidenzia risposta corretta</button>
+        <button class="btn" data-cmd="prev">◀ Precedente</button>
+        <button class="btn" data-cmd="next">Successivo ▶</button>
+        <button class="btn danger" id="c-reset">Azzera voti</button>
+      </div>
+      <p class="note">Scorciatoie: <b>Q</b> domanda, <b>R</b> risultati, <b>Spazio</b> alterna, <b>H</b> nascondi, <b>V</b> apri o chiudi il voto, <b>← →</b> cambia sondaggio.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Risposte ricevute</h2>
+      <div class="results" id="results"></div>
+      <div class="tot">
+        <span id="tot">0 voti</span><span id="last"></span>
+        <span class="sim">Voto di prova: <span id="sim"></span></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Anteprima overlay</h2>
+      <div class="stage"><iframe src="/overlay?preview" title="Anteprima overlay"></iframe></div>
+      <div class="urlrow">
+        <input type="text" id="url" readonly aria-label="URL overlay per OBS">
+        <button class="btn" id="copy">Copia URL</button>
+      </div>
+      <p class="note">In OBS: aggiungi una sorgente <b>Browser</b> con questo URL, larghezza 1920 e altezza 1080. Lo sfondo è trasparente.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Impostazioni</h2>
+      <form id="settings">
+        <div class="grid2">
+          <label>ID sessione Social Stream Ninja<input type="text" id="s-session" autocomplete="off" spellcheck="false"></label>
+          <label>Password sessione (se impostata)<input type="text" id="s-password" autocomplete="off" spellcheck="false"></label>
+          <label>Posizione dell'overlay
+            <select id="s-position"><option value="bottom">In basso</option><option value="center">Al centro</option><option value="top">In alto</option></select>
+          </label>
+        </div>
+        <div class="rowbtns" style="margin-top:10px"><button class="btn primary" type="submit">Salva impostazioni</button><span class="note" id="s-saved" style="margin:0;align-self:center"></span></div>
+      </form>
+      <p class="note">L'ID sessione è la parte dopo <code>session=</code> nei link che Social Stream Ninja ti mostra. È l'overlay aperto in OBS a leggere la chat: i voti arrivano solo mentre la sorgente Browser è attiva.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f'];
+const $ = (id) => document.getElementById(id);
+let state = null, editingId = null, settingsDirty = false;
+
+const api = (path, method = 'GET', body) =>
+  fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+    .then((r) => r.json());
+const cmd = (name) => api('/control/' + name);
+
+// ---------- editor ----------
+function buildOptionRows() {
+  const box = $('f-options');
+  LETTERS.forEach((l, i) => {
+    const row = document.createElement('div');
+    row.className = 'optrow';
+    row.innerHTML = `<b>${l.toUpperCase()}</b><input type="text" id="f-${l}" aria-label="Risposta ${l.toUpperCase()}" placeholder="${i < 2 ? 'Risposta' : 'Risposta (facoltativa)'}">
+      <label class="radio"><input type="radio" name="right" value="${l}"> corretta</label>`;
+    box.appendChild(row);
+  });
+}
+function fillEditor(poll) {
+  editingId = poll ? poll.id : null;
+  $('editor-title').textContent = poll ? 'Modifica sondaggio' : 'Nuovo sondaggio';
+  $('f-title').value = poll ? poll.title : '';
+  LETTERS.forEach((l, i) => { $('f-' + l).value = poll ? (poll.options[i] || '') : ''; });
+  const right = poll ? poll.right : '';
+  document.querySelectorAll('input[name=right]').forEach((r) => { r.checked = r.value === right; });
+  $('err').textContent = '';
+}
+// "Domanda: ... / * A. ... / * B. ..." -> titolo + risposte
+function parsePasted(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const options = [], titleParts = [];
+  for (const line of lines) {
+    const lettered = line.match(/^(?:[*\-•]\s*)?[A-Fa-f]\s*[.):\-]\s+(.*)$/);
+    const bullet = titleParts.length ? line.match(/^[*\-•]\s+(.*)$/) : null;
+    const m = lettered || bullet;
+    if (m) options.push(m[1].trim());
+    else if (!options.length) titleParts.push(line);
+  }
+  let title = titleParts.join(' ').replace(/^domanda\s*:\s*/i, '');
+  title = title.replace(/\s*Risposta (singola|multipla)\s*:?\s*$/i, '').trim();
+  return { title, options: options.slice(0, 6) };
+}
+$('parse').onclick = () => {
+  const { title, options } = parsePasted($('paste').value);
+  if (title) $('f-title').value = title;
+  LETTERS.forEach((l, i) => { $('f-' + l).value = options[i] || ''; });
+  $('paste-box').open = false;
+};
+$('editor').onsubmit = async (e) => {
+  e.preventDefault();
+  const right = document.querySelector('input[name=right]:checked')?.value || '';
+  // La lettera "corretta" segue la risposta anche se ci sono righe vuote in mezzo.
+  const kept = LETTERS.map((l) => ({ t: $('f-' + l).value.trim(), l })).filter((o) => o.t);
+  const rightIdx = kept.findIndex((o) => o.l === right);
+  const res = await api('/api/polls', 'POST', {
+    id: editingId, title: $('f-title').value, options: kept.map((o) => o.t), right: rightIdx > -1 ? LETTERS[rightIdx] : '',
+  });
+  if (!res.ok) { $('err').textContent = res.error; return; }
+  fillEditor(null); $('paste').value = '';
+};
+$('cancel').onclick = () => fillEditor(null);
+$('new').onclick = () => { fillEditor(null); $('f-title').focus(); };
+
+// ---------- render ----------
+function render() {
+  const { polls, live, settings, overlays } = state;
+  const active = polls.find((p) => p.id === live.activeId);
+
+  // stato collegamenti
+  const po = $('pill-overlay');
+  po.className = 'pill ' + (overlays ? 'ok' : 'warn');
+  po.lastElementChild.textContent = overlays ? `Overlay collegato${overlays > 1 ? ' (' + overlays + ')' : ''}` : 'Overlay non collegato';
+  const pc = $('pill-chat');
+  const hasSession = !!settings.sessionId;
+  pc.className = 'pill ' + (live.lastMessageAt ? 'ok' : hasSession ? '' : 'warn');
+  pc.lastElementChild.textContent = !hasSession ? 'Chat: manca ID sessione'
+    : live.lastMessageAt ? 'Chat: ultimo messaggio ' + new Date(live.lastMessageAt).toLocaleTimeString('it-IT') : 'Chat: nessun messaggio';
+
+  // elenco
+  $('empty').hidden = polls.length > 0;
+  const ul = $('polls');
+  ul.replaceChildren();
+  polls.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.className = 'poll' + (p.id === live.activeId ? ' active' : '');
+    li.innerHTML = '<div class="t"></div><div class="sub"><span></span></div>';
+    li.querySelector('.t').textContent = p.title;
+    li.querySelector('.sub span').textContent = `${p.options.length} risposte · ${p.total} ${p.total === 1 ? 'voto' : 'voti'}`;
+    const sub = li.querySelector('.sub');
+    const mk = (label, title, fn, cls = '') => {
+      const b = document.createElement('button');
+      b.className = 'btn small ' + cls; b.textContent = label; b.title = title; b.setAttribute('aria-label', title);
+      b.onclick = (e) => { e.stopPropagation(); fn(); };
+      sub.appendChild(b);
+    };
+    mk('↑', 'Sposta su', () => move(i, -1));
+    mk('↓', 'Sposta giù', () => move(i, 1));
+    mk('Modifica', 'Modifica', () => { fillEditor(p); $('f-title').focus(); });
+    mk('Elimina', 'Elimina', () => { if (confirm(`Eliminare il sondaggio "${p.title}"?`)) api('/api/polls/' + p.id, 'DELETE'); }, 'danger');
+    li.onclick = () => cmd('activate?id=' + p.id);
+    ul.appendChild(li);
+  });
+
+  // in onda
+  $('live-title').textContent = active ? active.title : 'Seleziona un sondaggio';
+  const bv = $('b-view');
+  bv.textContent = { hidden: 'NASCOSTO', question: 'IN ONDA · DOMANDA', results: 'IN ONDA · RISULTATI' }[live.view];
+  bv.className = 'badge' + (live.view !== 'hidden' ? ' on' : '');
+  const bo = $('b-open');
+  bo.textContent = live.open ? 'VOTO APERTO' : 'VOTO CHIUSO';
+  bo.className = 'badge' + (live.open ? ' open' : '');
+  document.querySelectorAll('.cmds .btn').forEach((b) => b.classList.toggle('current', !!active && b.dataset.view === live.view));
+  $('c-open').firstElementChild.textContent = live.open ? 'Chiudi voto' : 'Apri voto';
+  $('c-reveal').hidden = !(active && active.right);
+  $('c-reveal').textContent = live.reveal ? 'Togli evidenza risposta corretta' : 'Evidenzia risposta corretta';
+
+  // risultati
+  const box = $('results');
+  const sim = $('sim');
+  const key = active ? JSON.stringify([active.id, active.options, active.right]) : '';
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.replaceChildren(); sim.replaceChildren();
+    (active ? active.options : []).forEach((text, i) => {
+      const l = LETTERS[i];
+      const row = document.createElement('div');
+      row.className = 'res' + (active.right === l ? ' right' : '');
+      row.dataset.letter = l;
+      row.innerHTML = `<div class="lt">${l.toUpperCase()}</div><div class="tx"><div></div><div class="trk"><i></i></div></div><div class="n"></div>`;
+      row.querySelector('.tx div').textContent = text + (active.right === l ? ' ✓' : '');
+      box.appendChild(row);
+      const b = document.createElement('button');
+      b.className = 'btn small'; b.textContent = l.toUpperCase(); b.title = 'Aggiunge un voto di prova per ' + l.toUpperCase();
+      b.onclick = () => api('/api/vote', 'POST', { name: 'Prova ' + Math.random().toString(36).slice(2, 7), text: l });
+      sim.appendChild(b);
+    });
+    if (!active) box.textContent = 'Nessun sondaggio selezionato.';
+  }
+  box.querySelectorAll('.res').forEach((row) => {
+    const n = live.counts[row.dataset.letter] || 0;
+    const pct = live.total ? Math.round((n / live.total) * 100) : 0;
+    row.querySelector('i').style.width = pct + '%';
+    row.querySelector('.n').innerHTML = `<b>${pct}%</b> <small>(${n})</small>`;
+  });
+  $('tot').textContent = `${live.total} ${live.total === 1 ? 'voto' : 'voti'} in totale`;
+  $('last').textContent = live.lastVote ? `Ultimo: ${live.lastVote.name} → ${live.lastVote.letter.toUpperCase()}` : '';
+
+  // impostazioni (non sovrascrivere mentre si scrive)
+  if (!settingsDirty) {
+    $('s-session').value = settings.sessionId || '';
+    $('s-password').value = settings.password || '';
+    $('s-position').value = settings.position || 'bottom';
+  }
+}
+function move(i, d) {
+  const ids = state.polls.map((p) => p.id);
+  const j = i + d;
+  if (j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  api('/api/polls/order', 'POST', { ids });
+}
+
+// ---------- comandi ----------
+document.querySelectorAll('[data-cmd]').forEach((b) => { b.onclick = () => cmd(b.dataset.cmd); });
+$('c-open').onclick = () => cmd(state.live.open ? 'close' : 'open');
+$('c-reset').onclick = () => { if (confirm('Azzerare i voti di questo sondaggio?')) cmd('reset'); };
+document.addEventListener('keydown', (e) => {
+  if (!state || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) return;
+  const map = { q: 'question', r: 'results', h: 'hide', ' ': 'toggle', ArrowRight: 'next', ArrowLeft: 'prev', v: state.live.open ? 'close' : 'open' };
+  const c = map[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (c) { e.preventDefault(); cmd(c); }
+});
+
+// ---------- impostazioni ----------
+['s-session', 's-password', 's-position'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; $('s-saved').textContent = ''; }));
+$('settings').onsubmit = async (e) => {
+  e.preventDefault();
+  await api('/api/settings', 'POST', { sessionId: $('s-session').value, password: $('s-password').value, position: $('s-position').value });
+  settingsDirty = false; $('s-saved').textContent = 'Salvato';
+};
+$('url').value = location.origin + '/overlay';
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('url').value); } catch { $('url').select(); document.execCommand('copy'); }
+  $('copy').textContent = 'Copiato'; setTimeout(() => { $('copy').textContent = 'Copia URL'; }, 1500);
+};
+
+buildOptionRows();
+new EventSource('/api/stream?role=control').onmessage = (e) => { state = JSON.parse(e.data); render(); };
+</script>
+</body>
+</html>
