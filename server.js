@@ -20,6 +20,18 @@ try {
   store = { settings: { ...store.settings, ...saved.settings }, polls: saved.polls || [] };
 } catch { /* primo avvio */ }
 
+// Accetta l'ID nudo, "session=ID", un link intero o "ID&altri=parametri": tiene solo l'ID.
+function normalizeSession(value) {
+  const raw = String(value || '').trim();
+  const named = raw.match(/(?:^|[?&#])(?:session|room)=([^&#\s]+)/i);
+  const id = named ? named[1] : raw.replace(/^.*[?#]/, '').split(/[&#\s]/)[0];
+  try { return decodeURIComponent(id); } catch { return id; }
+}
+if (store.settings.sessionId !== normalizeSession(store.settings.sessionId)) {
+  store.settings.sessionId = normalizeSession(store.settings.sessionId);
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch { /* si riprova al prossimo salvataggio */ }
+}
+
 function persist() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2));
@@ -195,7 +207,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/settings' && req.method === 'POST') {
     const body = await readBody(req);
     for (const k of ['sessionId', 'password', 'position']) {
-      if (typeof body[k] === 'string') store.settings[k] = body[k].trim();
+      if (typeof body[k] === 'string') store.settings[k] = k === 'sessionId' ? normalizeSession(body[k]) : body[k].trim();
     }
     persist(); broadcast();
     return json(res, 200, { ok: true });

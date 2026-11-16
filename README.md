@@ -25,6 +25,9 @@ Non ci sono dipendenze da installare. Sondaggi e impostazioni sono salvati in
 3. Crea i sondaggi: a mano oppure incollando il testo "Domanda: ... * A. ... * B. ...".
 
 È l'overlay aperto in OBS a ricevere la chat e a inoltrare i voti al server.
+Ascolta entrambi i canali di Social Stream Ninja: quello diretto (P2P) e il relay
+WebSocket usato quando nell'estensione è attivo `server2`. Nel campo ID sessione
+puoi incollare anche il link intero: viene tenuto solo l'ID.
 
 ## Come vengono contati i voti
 

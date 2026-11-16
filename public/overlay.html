@@ -154,14 +154,48 @@ function connectState() {
 }
 connectState();
 
-// ---- chat da Social Stream Ninja (stesso metodo del loro overlay di esempio) ----
-let chatFrame = null, chatKey = '';
+// ---- chat da Social Stream Ninja ----
+// Due canali, come nel loro dock ufficiale:
+//  1. iframe P2P (modalità standard dell'estensione)
+//  2. relay WebSocket (quando nell'estensione è attivo "server2", cioè il link contiene &server2)
+// Se arrivano entrambi non è un problema: il server conta un voto per persona.
+const RELAY_URL = 'wss://io.socialstream.ninja/extension';
+let chatFrame = null, chatSocket = null, chatKey = '', chatSession = '', relayTries = 1, relayTimer = null;
+
+function forward(msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.overlayNinja && typeof msg.overlayNinja === 'object') msg = msg.overlayNinja;
+  if (typeof msg.chatmessage !== 'string' && typeof msg.chatname !== 'string') return;
+  fetch('/api/vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: msg.chatname || '', text: msg.chatmessage || '' }),
+  }).catch(() => {});
+}
+
+function connectRelay() {
+  clearTimeout(relayTimer);
+  if (!chatSession) return;
+  const session = chatSession;
+  const ws = new WebSocket(RELAY_URL);
+  chatSocket = ws;
+  ws.onopen = () => { relayTries = 1; ws.send(JSON.stringify({ join: session, out: 3, in: 4 })); };
+  ws.onmessage = (e) => { try { forward(JSON.parse(e.data)); } catch { /* non JSON */ } };
+  ws.onerror = () => ws.close();
+  ws.onclose = () => {
+    if (chatSocket !== ws) return;               // sostituito da una nuova sessione
+    relayTries = Math.min(relayTries + 1, 50);
+    relayTimer = setTimeout(connectRelay, 100 * relayTries);
+  };
+}
+
 function connectChat(settings) {
   const session = (settings.sessionId || '').trim();
   const key = session + '|' + (settings.password || '');
   if (PREVIEW || key === chatKey) return;
-  chatKey = key;
+  chatKey = key; chatSession = session;
   if (chatFrame) { chatFrame.remove(); chatFrame = null; }
+  if (chatSocket) { const old = chatSocket; chatSocket = null; old.close(); }
   if (!session) return;
   chatFrame = document.createElement('iframe');
   chatFrame.src = 'https://vdo.socialstream.ninja/?ln&salt=vdo.ninja&password=' +
@@ -169,16 +203,11 @@ function connectChat(settings) {
     '&push&label=dock&vd=0&ad=0&novideo&noaudio&autostart&cleanoutput&room=' + encodeURIComponent(session);
   chatFrame.style.cssText = 'width:0;height:0;position:fixed;left:-100px;top:-100px;border:0';
   document.body.appendChild(chatFrame);
+  connectRelay();
 }
 window.addEventListener('message', (e) => {
   if (!chatFrame || e.source !== chatFrame.contentWindow) return;
-  const msg = e.data && e.data.dataReceived && e.data.dataReceived.overlayNinja;
-  if (!msg || typeof msg !== 'object') return;
-  fetch('/api/vote', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: msg.chatname || '', text: msg.chatmessage || '' }),
-  }).catch(() => {});
+  forward(e.data && e.data.dataReceived);
 });
 </script>
 </body>
